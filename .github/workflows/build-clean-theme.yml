@@ -1,0 +1,76 @@
+name: Build XR30 eMMC OpenWrt (Clean + Argon Theme)
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo apt-get clean
+          df -h /
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext gcc-multilib g++-multilib git gnutls-dev gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip libpython3-dev qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
+
+      - name: Clone source (hanwckf immortalwrt-mt798x, openwrt-21.02)
+        run: |
+          git clone --depth 1 -b openwrt-21.02 https://github.com/hanwckf/immortalwrt-mt798x.git openwrt
+
+      - name: Apply feeds.conf.default (clean + argon)
+        run: |
+          cp adapt/feeds-clean.conf.default openwrt/feeds.conf.default
+
+      - name: Update & install feeds
+        working-directory: openwrt
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Apply config (cmcc_xr30 + argon, no extra plugins)
+        run: |
+          cp adapt/xr30-clean-theme.config openwrt/.config
+          cd openwrt
+          make defconfig
+
+      - name: Run diy-part1
+        working-directory: openwrt
+        run: bash ../adapt/diy-clean-part1.sh
+
+      - name: Run diy-part2
+        working-directory: openwrt
+        run: bash ../adapt/diy-clean-part2.sh
+
+      - name: Download packages
+        working-directory: openwrt
+        run: make download -j$(nproc)
+
+      - name: Compile firmware
+        working-directory: openwrt
+        run: |
+          make -j$(nproc) || make -j1 V=s
+
+      - name: Collect firmware
+        working-directory: openwrt
+        run: |
+          mkdir -p ../firmware-out
+          find bin/targets -name '*cmcc_xr30*' -exec cp {} ../firmware-out/ \;
+          ls -lh ../firmware-out
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: xr30-emmc-clean-argon-firmware
+          path: firmware-out/*
