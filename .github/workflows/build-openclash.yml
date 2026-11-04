@@ -44,7 +44,7 @@ jobs:
       - name: 拷贝配置 / feeds / diy 脚本到源码
         run: |
           cd openwrt
-          cp ../feeds-openclash.conf.default feeds.conf.default
+          cp ../adapt/feeds-openclash.conf.default feeds.conf.default
           cp ../adapt/xr30-openclash.config .config
           cp ../adapt/diy-openclash-part1.sh diy-part1.sh
           cp ../adapt/diy-openclash-part2.sh diy-part2.sh
