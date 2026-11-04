@@ -1,0 +1,110 @@
+name: Build XR30 eMMC OpenWrt (openlist + passwall)
+
+on:
+  workflow_dispatch:
+    inputs:
+      openlist:
+        description: '编译并包含 luci-app-openlist（网盘聚合挂载）'
+        type: boolean
+        default: true
+      passwall:
+        description: '编译并包含 luci-app-passwall（科学上网）'
+        type: boolean
+        default: true
+  # 如需定时自动编译，取消下面注释（UTC 时间，以下为每天北京时间 02:00）
+  # schedule:
+  #   - cron: '0 18 * * *'
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    # 若 GitHub 已弃用 ubuntu-22.04，可改为 ubuntu-24.04（openwrt-21.02 可能需额外 patch）
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout 本仓库（配置文件与脚本）
+        uses: actions/checkout@v4
+
+      - name: 释放 Runner 磁盘空间
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force || true
+          df -h /
+
+      - name: 安装编译依赖
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+            bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk \
+            gettext gcc-multilib g++-multilib git gnutls-dev gperf haveged help2man intltool \
+            lib32gcc-s1 libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev \
+            libmpc-dev libmpfr-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev \
+            libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano ninja-build \
+            p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply python3-docutils \
+            python3-pyelftools qemu-utils re2c rsync scons squashfs-tools subversion swig \
+            texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd
+
+      - name: 克隆源码（hanwckf immortalwrt-mt798x, 分支 openwrt-21.02）
+        run: |
+          git clone --depth=1 https://github.com/hanwckf/immortalwrt-mt798x -b openwrt-21.02 openwrt
+
+      - name: 拷贝配置 / feeds / diy 脚本到源码
+        run: |
+          cd openwrt
+          cp ../feeds.conf.default feeds.conf.default
+          cp ../adapt/xr30-emmc.config .config
+          cp ../adapt/diy-part1.sh diy-part1.sh
+          cp ../adapt/diy-part2.sh diy-part2.sh
+          chmod +x diy-part1.sh diy-part2.sh
+
+      - name: 执行 diy-part1（feeds update 之前）
+        run: cd openwrt && bash ./diy-part1.sh
+
+      - name: 更新 feeds
+        run: cd openwrt && ./scripts/feeds update -a
+
+      - name: 为 OpenList 替换 golang 工具链（仅开启 openlist 时）
+        if: ${{ github.event.inputs.openlist == 'true' }}
+        run: |
+          cd openwrt
+          rm -rf feeds/packages/lang/golang
+          git clone --depth=1 https://github.com/OpenListTeam/packages_lang_golang -b 21.x feeds/packages/lang/golang
+
+      - name: 安装 feeds
+        run: cd openwrt && ./scripts/feeds install -a
+
+      - name: 执行 diy-part2（feeds install 之后）
+        run: cd openwrt && bash ./diy-part2.sh
+
+      - name: 配置（defconfig + 按输入开关插件）
+        run: |
+          cd openwrt
+          if [ "${{ github.event.inputs.openlist }}" != "true" ]; then
+            sed -i 's/^CONFIG_PACKAGE_luci-app-openlist=y/# CONFIG_PACKAGE_luci-app-openlist is not set/' .config
+            sed -i 's/^CONFIG_PACKAGE_luci-i18n-openlist-zh-cn=y/# CONFIG_PACKAGE_luci-i18n-openlist-zh-cn is not set/' .config
+          fi
+          if [ "${{ github.event.inputs.passwall }}" != "true" ]; then
+            sed -i 's/^CONFIG_PACKAGE_luci-app-passwall=y/# CONFIG_PACKAGE_luci-app-passwall is not set/' .config
+          fi
+          make defconfig
+
+      - name: 下载源码包（make download）
+        run: cd openwrt && make download -j$(nproc)
+
+      - name: 编译固件
+        run: |
+          cd openwrt
+          make -j$(nproc) || make -j1 || make -j1 V=s
+
+      - name: 上传固件产物
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xr30-emmc-firmware
+          path: |
+            openwrt/bin/targets/mediatek/mt7981/*squashfs*.bin
+            openwrt/bin/targets/mediatek/mt7981/sha256sums
+          if-no-files-found: warn
