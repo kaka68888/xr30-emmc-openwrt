@@ -1,0 +1,8 @@
+# ===== 基础源（lgs2007m 维护的 MT798x 定制包，XR30 eMMC 适配依赖）=====
+src-git-full packages https://github.com/lgs2007m/immortalwrt-mt798x-packages.git;openwrt-21.02
+src-git-full luci https://github.com/lgs2007m/immortalwrt-mt798x-luci.git;openwrt-21.02
+src-git-full routing https://github.com/openwrt/routing.git;openwrt-21.02
+src-git-full telephony https://github.com/openwrt/telephony.git;openwrt-21.02
+
+# ===== OpenClash（纯净版唯一插件；vernesong 官方源，master 分支）=====
+src-git openclash https://github.com/vernesong/OpenClash.git;master
