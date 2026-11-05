@@ -91,6 +91,19 @@ jobs:
           fi
           make defconfig
 
+      - name: 校验目标设备必须是 XR30 eMMC（防 NAND/eMMC 错配）
+        run: |
+          cd openwrt
+          if ! grep -q '^CONFIG_TARGET_DEVICE_mediatek_mt7981_DEVICE_cmcc_xr30-emmc=y' .config; then
+            echo "::error::目标设备不是 cmcc_xr30-emmc (XR30 eMMC)，编译中止以免产出错误固件"
+            exit 1
+          fi
+          if grep -q '^CONFIG_TARGET_DEVICE_mediatek_mt7981_DEVICE_cmcc_xr30=y' .config; then
+            echo "::error::同时启用了 cmcc_xr30 (XR30 NAND)，编译中止"
+            exit 1
+          fi
+          echo "✅ 目标设备已确认为 XR30 eMMC (cmcc_xr30-emmc)"
+
       - name: 下载源码包（make download）
         run: cd openwrt && make download -j$(nproc)
 
@@ -105,6 +118,6 @@ jobs:
         with:
           name: xr30-emmc-firmware
           path: |
-            openwrt/bin/targets/mediatek/mt7981/*squashfs*.bin
+            openwrt/bin/targets/mediatek/mt7981/*cmcc_xr30-emmc*.bin
             openwrt/bin/targets/mediatek/mt7981/sha256sums
           if-no-files-found: warn
