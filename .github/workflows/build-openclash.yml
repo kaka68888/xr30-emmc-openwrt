@@ -62,15 +62,11 @@ jobs:
       - name: 执行 diy-part2（feeds install 之后）
         run: cd openwrt && bash ./diy-part2.sh
 
-      - name: 配置（defconfig）
-        run: |
-          cd openwrt
-          make defconfig
-
-      - name: 强制恢复第三方包配置（修复 defconfig 丢弃 =y）
+      - name: 配置（defconfig 前注入包与依赖，defconfig 后不再改动 .config）
         run: |
           cd openwrt
           CFG=../adapt/xr30-openclash.config
+          # 1) defconfig 之前把原始 config 的所有 =y 写回 .config，确保第三方包符号存在
           grep '^CONFIG_PACKAGE_.*=y' "$CFG" > /tmp/pkgs-wanted.txt || true
           echo "原始 config 启用包数: $(wc -l < /tmp/pkgs-wanted.txt)"
           while IFS= read -r line; do
@@ -78,7 +74,21 @@ jobs:
             sed -i "/^# ${sym} is not set$/d; /^${sym}=/d" .config
             echo "$line" >> .config
           done < /tmp/pkgs-wanted.txt
-          echo "=== 恢复后启用的 LuCI 应用/主题 ==="
+          # 2) 显式补齐 OpenClash / argon 的运行依赖
+          #    之前这些包没被选中，opkg install 阶段报 cannot find dependency
+          for p in bash curl ip-full ruby ruby-yaml unzip kmod-crypto-user; do
+            sed -i "/^# CONFIG_PACKAGE_${p} is not set$/d; /^CONFIG_PACKAGE_${p}=/d" .config
+            echo "CONFIG_PACKAGE_${p}=y" >> .config
+          done
+          # 3) 由 defconfig 统一解析依赖；此后不再改 .config，否则 make 会自动 oldconfig 并丢掉依赖
+          make defconfig
+          echo "=== defconfig 后关键包校验 ==="
+          for p in luci-app-openclash luci-theme-argon bash curl ip-full ruby ruby-yaml unzip; do
+            if ! grep -q "^CONFIG_PACKAGE_${p}=y" .config; then
+              echo "::error::${p} 在 defconfig 后丢失（feeds 未正确安装？），中止以免又产出废固件"
+              exit 1
+            fi
+          done
           grep -E '^CONFIG_PACKAGE_(luci-app-|luci-theme-).*=y' .config | head -40 || true
 
       - name: 校验目标设备必须是 XR30 eMMC（防 NAND/eMMC 错配）
