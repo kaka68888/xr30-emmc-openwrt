@@ -6,6 +6,3 @@ src-git-full telephony https://github.com/openwrt/telephony.git;openwrt-21.02
 
 # ===== OpenClash（纯净版唯一插件；vernesong 官方源，master 分支）=====
 src-git openclash https://github.com/vernesong/OpenClash.git;master
-
-# ===== Argon 主题（jerrykuku v2.2.9.4，纯 Lua 版，适配 openwrt-21.02）=====
-src-git argon https://github.com/jerrykuku/luci-theme-argon.git;v2.2.9.4
