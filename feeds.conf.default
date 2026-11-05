@@ -10,3 +10,6 @@ src-git passwall https://github.com/xiaorouji/luci-app-passwall.git;main
 
 # ===== OpenList（网盘聚合挂载，用户指定；OpenListTeam 官方源）=====
 src-git openlist https://github.com/OpenListTeam/OpenList-OpenWRT.git;main
+
+# ===== Argon 主题（jerrykuku v2.2.9.4，纯 Lua 版，适配 openwrt-21.02）=====
+src-git argon https://github.com/jerrykuku/luci-theme-argon.git;v2.2.9.4
