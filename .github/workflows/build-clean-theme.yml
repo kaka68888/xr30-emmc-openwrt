@@ -39,11 +39,24 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Apply config (cmcc_xr30 + argon, no extra plugins)
+      - name: Apply config (cmcc_xr30-emmc + argon, no extra plugins)
         run: |
           cp adapt/xr30-clean-theme.config openwrt/.config
           cd openwrt
           make defconfig
+
+      - name: Verify target device is XR30 eMMC (guard against NAND/eMMC mix-up)
+        run: |
+          cd openwrt
+          if ! grep -q '^CONFIG_TARGET_DEVICE_mediatek_mt7981_DEVICE_cmcc_xr30-emmc=y' .config; then
+            echo "::error::Target is not cmcc_xr30-emmc (XR30 eMMC), aborting"
+            exit 1
+          fi
+          if grep -q '^CONFIG_TARGET_DEVICE_mediatek_mt7981_DEVICE_cmcc_xr30=y' .config; then
+            echo "::error::cmcc_xr30 (XR30 NAND) also enabled, aborting"
+            exit 1
+          fi
+          echo "Target confirmed: XR30 eMMC (cmcc_xr30-emmc)"
 
       - name: Run diy-part1
         working-directory: openwrt
@@ -66,8 +79,12 @@ jobs:
         working-directory: openwrt
         run: |
           mkdir -p ../firmware-out
-          find bin/targets -name '*cmcc_xr30*' -exec cp {} ../firmware-out/ \;
+          find bin/targets -name '*cmcc_xr30-emmc*' -exec cp {} ../firmware-out/ \;
           ls -lh ../firmware-out
+          if ! ls ../firmware-out/*cmcc_xr30-emmc* &>/dev/null; then
+            echo "::error::未找到 cmcc_xr30-emmc (XR30 eMMC) 产物，编译中止"
+            exit 1
+          fi
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
